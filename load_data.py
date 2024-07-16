@@ -8,13 +8,6 @@ from torch.utils.data import Dataset
 # Global variable for the number of days to average
 DAYS_TO_AVERAGE = 5
 
-
-def date_to_int(date):
-    date = date.split(" ")[0]
-    epoch = datetime(1, 1, 1)  # January 1st, year 0
-    delta = pd.Timestamp(date) - epoch
-    return delta.days
-
 def int_to_date(date):
     epoch = datetime(1, 1, 1)  # January 1st, year 0
     target_date = epoch + timedelta(days=int(date))
@@ -36,10 +29,7 @@ class StockDataset(Dataset):
 
         # Load each data type into the dictionary
         for data_type in ["stock_prices", "income_statement", "balance_sheet", "cash_flow", "corporate_actions"]:
-            data[data_type] = pd.read_csv(f"{self.data_dir}\{data_type}.csv")
-            if data_type not in ["corporate_actions", "stock_prices"]:
-                data[data_type].rename(columns={"fiscalDateEnding": "Date"}, inplace=True)
-            data[data_type]["Date"] = data[data_type]["Date"].apply(date_to_int)
+            data[data_type] = pd.read_csv(f"{self.data_dir}\\{data_type}.csv")
         return data
 
     def sample_data_up_to_date(self):
@@ -63,8 +53,7 @@ class StockDataset(Dataset):
 
 # Example usage:
 if __name__ == "__main__":
-    open(".\data\APPL\stock_prices.csv", "r")
-    data_dir = "data\APPL"  # Example directory, replace with your data directory path
+    data_dir = "data\\AAPL"  # Example directory, replace with your data directory path
     dataset = StockDataset(data_dir)
 
     # Example of loading data up to, but not including, a sampled date and averaging the next 5 days
