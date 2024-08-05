@@ -10,7 +10,8 @@ from torch.nn.utils.rnn import pad_sequence
 DAYS_TO_AVERAGE = 5
 DATA_TYPES = ["stock_prices", "income_statement", "balance_sheet", "cash_flow", "corporate_actions"]
 STOCK_PRICES_ID = DATA_TYPES.index("stock_prices")
-
+WINDOW_SIZE = 365 * 3  # 3 years of data
+WINDOW_INTERVAL = 5  # 5 days
 
 def stock_collate(batch):
     inputs, targets, dates = zip(*batch)
@@ -34,7 +35,9 @@ class StockDataset(Dataset):
 
     def load_data(self) -> list[pd.DataFrame]:
         # Load each data type into a list
-        return [pd.read_csv(f"{self.data_dir}\\{data_type}.csv") for data_type in DATA_TYPES]
+        data = [pd.read_csv(f"{self.data_dir}\\{data_type}.csv") for data_type in DATA_TYPES]
+        data[STOCK_PRICES_ID] = data[STOCK_PRICES_ID][(data[STOCK_PRICES_ID]["Date"] % WINDOW_INTERVAL == 0)]
+        return data
 
     def __len__(self):
         return len(self.data[STOCK_PRICES_ID])
@@ -44,13 +47,13 @@ class StockDataset(Dataset):
         stock_prices = self.data[STOCK_PRICES_ID]
         # sampled_date_index = random.randint(0, len(stock_prices) - 1)
         sampled_date_index = random.randint(int((len(stock_prices) - 1) * 0.75), len(stock_prices) - 1)
-        sampled_date: float = stock_prices.loc[sampled_date_index, "Date"]
+        sampled_date: float = stock_prices.iloc[sampled_date_index, 0]
 
         # Generate dictionary up to, but not including, the sampled date for each data type
-        data_up_to_date = [torch.tensor(df[df["Date"] < sampled_date].values) for df in self.data]
+        data_up_to_date = [torch.tensor(df[(df["Date"] < sampled_date) & (df["Date"] < sampled_date - WINDOW_SIZE)].values) for df in self.data]
 
-        # Calculate average stock value over the next DAYS_TO_AVERAGE days
-        next_days_prices = stock_prices[(stock_prices["Date"] > sampled_date) & (stock_prices["Date"] <= sampled_date + DAYS_TO_AVERAGE)]
+        # Calculate average stock value over the next WINDOW_SIZE days
+        next_days_prices = stock_prices[(stock_prices["Date"] > sampled_date) & (stock_prices["Date"] <= sampled_date + WINDOW_SIZE)]
         average_stock_value = next_days_prices["Close"].mean()
 
         return data_up_to_date, average_stock_value, sampled_date

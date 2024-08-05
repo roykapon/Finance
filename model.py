@@ -33,6 +33,8 @@ class TransformerModel(nn.Module):
         self.final_mlp = nn.Sequential(nn.Linear(64, 128), nn.ReLU(), nn.Linear(128, output_dim))
 
     def forward(self, inputs: list[torch.Tensor]) -> torch.Tensor:
+        
+        
         # Encode each input using its respective MLP
         encoded_inputs = []
         for mlp, x in zip(self.mlps, inputs):
@@ -41,16 +43,14 @@ class TransformerModel(nn.Module):
             encoded_inputs.append(mlp(x))
 
         # Concatenate encoded inputs and add class token
-        x = torch.cat(encoded_inputs + self.class_token, dim=0)
+        LEN, BS, LATENT = encoded_inputs[0].shape
+        x = torch.cat([torch.tile(self.class_token, [1, BS, 1])] + encoded_inputs, dim=0)
 
         # Apply Transformer encoder
         x = self.transformer_encoder(x)
 
         # Extract class token and apply final MLP
-        class_token_output = x[:, 0]
-        output = self.final_mlp(class_token_output)
-
-        return output
+        return self.final_mlp(x[0])
 
 
 # Example usage

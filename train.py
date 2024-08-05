@@ -21,6 +21,8 @@ def train_model(model: TransformerModel, dataloader: DataLoader, num_epochs=10, 
             # Forward pass
             outputs = model(inputs)
             loss = criterion(outputs.squeeze(), targets)
+            
+            print(f"Loss: {loss.item()}")
 
             # Backward pass and optimization
             loss.backward()

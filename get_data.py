@@ -6,7 +6,7 @@ from alpha_vantage.fundamentaldata import FundamentalData
 import os
 
 # Set up API key
-alpha_vantage_api_key = "1ES7CKK29UDZFPPW"
+alpha_vantage_api_key = "YSYKLOPDTQH07PLW"
 
 # List of the 100 most traded stock symbols (Example list)
 # fmt: off
@@ -24,7 +24,7 @@ def process_data(data: pd.DataFrame):
     data.rename(columns={"fiscalDateEnding": "Date"}, inplace=True)
     for col in data.columns:
         # convert all data to float and remove data of non-numeric type
-        data = data.replace({"None": np.nan})
+        data = data.replace({"None": -1.0})
         data = data.convert_dtypes()
 
         if col == "reportedCurrency":
@@ -104,6 +104,5 @@ for symbol in most_traded_stocks:
     except Exception as e:
         print(f"Failed to process {symbol}: {e}")
 
-    break
 
 print("Data collection complete.")
