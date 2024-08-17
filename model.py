@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class MLP(nn.Module):
     def __init__(self, input_size, output_size=64):
-        super(MLP, self).__init__()
+        super().__init__()
         self.fc1 = nn.Linear(input_size, 128)
         self.fc2 = nn.Linear(128, output_size)
 
@@ -17,7 +17,7 @@ class MLP(nn.Module):
 
 class TransformerModel(nn.Module):
     def __init__(self, input_sizes, num_heads=4, num_layers=2, hidden_dim=256, output_dim=1):
-        super(TransformerModel, self).__init__()
+        super().__init__()
 
         # Create an MLP for each data type
         self.mlps = nn.ModuleList([MLP(input_size) for input_size in input_sizes])
@@ -33,14 +33,8 @@ class TransformerModel(nn.Module):
         self.final_mlp = nn.Sequential(nn.Linear(64, 128), nn.ReLU(), nn.Linear(128, output_dim))
 
     def forward(self, inputs: list[torch.Tensor]) -> torch.Tensor:
-        
-        
         # Encode each input using its respective MLP
-        encoded_inputs = []
-        for mlp, x in zip(self.mlps, inputs):
-            mask = torch.isnan(x)
-            x = x.masked_fill(mask, 0)  # Replace NaNs with zero
-            encoded_inputs.append(mlp(x))
+        encoded_inputs = [mlp(x) for mlp, x in zip(self.mlps, inputs)]
 
         # Concatenate encoded inputs and add class token
         LEN, BS, LATENT = encoded_inputs[0].shape
@@ -51,20 +45,3 @@ class TransformerModel(nn.Module):
 
         # Extract class token and apply final MLP
         return self.final_mlp(x[0])
-
-
-# Example usage
-if __name__ == "__main__":
-    # Assuming each data type has different input sizes
-    input_sizes = [10, 15, 20]  # Example input sizes for different data types
-
-    # Create random input tensors for each data type
-    inputs = [torch.rand(32, size) for size in input_sizes]  # Batch size of 32
-
-    # Introduce some NaN values
-    inputs[0][0, 0] = float("nan")
-    inputs[1][1, 1] = float("nan")
-
-    model = TransformerModel(input_sizes)
-    output = model(inputs)
-    print(output.shape)  # Should output: torch.Size([32, 1])
