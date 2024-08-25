@@ -1,16 +1,19 @@
-from datetime import datetime
 import numpy as np
 import pandas as pd
 import yfinance as yf
 from alpha_vantage.fundamentaldata import FundamentalData
 import os
 
+DATA_TYPES = ["stock_prices", "income_statement", "balance_sheet", "cash_flow", "corporate_actions"]
+MIN_STD = 1e-5
+
 # Set up API key
-alpha_vantage_api_key = "YSYKLOPDTQH07PLW"
+alpha_vantage_api_key = "7OLTH3MD4449GIQ3"
 
 # List of the 100 most traded stock symbols (Example list)
 # fmt: off
-most_traded_stocks = ["AAPL", "MSFT", "AMZN", "TSLA", "GOOGL", "GOOG", "META", "NVDA", "PYPL", "ADBE", "NFLX", "INTC", "CSCO", "PFE", "MRK", "DIS", "V", "MA", "JPM", "BAC", "WMT", "T", "PG", "KO", "PEP", "XOM", "CVX", "BA", "NKE", "MCD", "IBM", "ORCL", "ACN", "AVGO", "TXN", "COST", "QCOM", "AMD", "SPGI", "AMT", "MDT", "HON", "LLY", "UNP", "UNH", "UPS", "NEE", "AXP", "LIN", "LOW", "MS", "GS", "BLK", "BK", "TMO", "ABBV", "CVS", "RTX", "MMM", "INTU", "SYK", "CAT", "CI", "FIS", "DHR", "HUM", "EL", "LMT", "ADP", "SCHW", "ZTS", "ISRG", "GE", "USB", "FDX", "ICE", "SBUX", "CME", "NOW", "TMUS", "GM", "DE", "MMC", "ANTM", "GILD", "ADSK", "PLD", "ECL", "APD", "BSX", "MO", "FISV", "HCA", "DG", "F", "CL", "D", "DUK", "SO", "ETN",]
+# most_traded_stocks = ["AAPL", "MSFT", "AMZN", "TSLA", "GOOGL", "GOOG", "META", "NVDA", "PYPL", "ADBE", "NFLX", "INTC", "CSCO", "PFE", "MRK", "DIS", "V", "MA", "JPM", "BAC", "WMT", "T", "PG", "KO", "PEP", "XOM", "CVX", "BA", "NKE", "MCD", "IBM", "ORCL", "ACN", "AVGO", "TXN", "COST", "QCOM", "AMD", "SPGI", "AMT", "MDT", "HON", "LLY", "UNP", "UNH", "UPS", "NEE", "AXP", "LIN", "LOW", "MS", "GS", "BLK", "BK", "TMO", "ABBV", "CVS", "RTX", "MMM", "INTU", "SYK", "CAT", "CI", "FIS", "DHR", "HUM", "EL", "LMT", "ADP", "SCHW", "ZTS", "ISRG", "GE", "USB", "FDX", "ICE", "SBUX", "CME", "NOW", "TMUS", "GM", "DE", "MMC", "ANTM", "GILD", "ADSK", "PLD", "ECL", "APD", "BSX", "MO", "FISV", "HCA", "DG", "F", "CL", "D", "DUK", "SO", "ETN",]
+most_traded_stocks = []
 # fmt: on
 
 basedate = pd.Timestamp("0001-1-1")
@@ -78,31 +81,61 @@ if not os.path.exists("data"):
 
 # Loop over the most traded stocks
 for symbol in most_traded_stocks:
-    try:
-        print(f"Processing {symbol}...")
+    company_dir = f"data/{symbol}"
+    print(f"Processing {symbol}...")
 
-        # Fetch data
-        stock_prices = get_stock_prices(symbol)
-        income_statement, balance_sheet, cash_flow = get_financial_statements(symbol)
-        corporate_actions = get_corporate_actions(symbol)
+    if not os.path.exists(company_dir):
+        try:
 
-        # Create directory for each company
-        company_dir = f"data/{symbol}"
-        if not os.path.exists(company_dir):
             os.makedirs(company_dir)
+            # Fetch data
+            stock_prices = get_stock_prices(symbol)
+            income_statement, balance_sheet, cash_flow = get_financial_statements(symbol)
+            corporate_actions = get_corporate_actions(symbol)
 
-        data_dict = {"stock_prices": stock_prices, "income_statement": income_statement, "balance_sheet": balance_sheet, "cash_flow": cash_flow, "corporate_actions": corporate_actions}
+            data_dict = {"stock_prices": stock_prices, "income_statement": income_statement, "balance_sheet": balance_sheet, "cash_flow": cash_flow, "corporate_actions": corporate_actions}
 
-        # process data
-        for data_type, data in data_dict.items():
-            data_dict[data_type] = process_data(data)
+            # process data
+            for data_type, data in data_dict.items():
+                data_dict[data_type] = process_data(data)
 
-        # Save each table to a separate CSV file
-        for data_type, data in data_dict.items():
-            data.to_csv(f"{company_dir}/{data_type}.csv", index=False)
+            # Save each table to a separate CSV file
+            for data_type, data in data_dict.items():
+                data.to_csv(f"{company_dir}/{data_type}.csv", index=False)
 
-    except Exception as e:
-        print(f"Failed to process {symbol}: {e}")
+        except Exception as e:
+            print(f"Failed to fetch {symbol}: {e}")
 
+# convert the tables to numpy arrays
+all_data = {data_type: {} for data_type in DATA_TYPES}
+for company in os.listdir("data"):
+    if not os.path.isdir(f"data/{company}"):
+        continue
+    for data_type in DATA_TYPES:
+        data = pd.read_csv(f"data/{company}/{data_type}.csv")
+        data = data.to_numpy()
+        data = data.astype(float)
+        # replace NaN with -1
+        data = np.where(np.isnan(data), -1, data)
+        all_data[data_type][company] = data
 
+# get mean and std for each data type
+all_data_concatenated = {data_type: np.concatenate(list(data.values())) for data_type, data in all_data.items()}
+means = {data_type: data.mean(axis=0) for data_type, data in all_data_concatenated.items()}
+stds = {data_type: np.maximum(data.std(axis=0), MIN_STD) for data_type, data in all_data_concatenated.items()}
+# stds = {data_type: data.std(axis=0) for data_type, data in all_data_concatenated.items()}
+# do not normalize dates
+for data_type in DATA_TYPES:
+    means[data_type][0] = means["stock_prices"][0]
+    stds[data_type][0] = stds["stock_prices"][0]
+np.save(f"data/means.npy", means)
+np.save(f"data/stds.npy", stds)
+
+# normalize data
+normalized_data = {data_type: {company: (company_data_type - means[data_type]) / stds[data_type] for company, company_data_type in data_of_type.items()} for data_type, data_of_type in all_data.items()}
+
+# save normalized data
+for data_type in DATA_TYPES:
+    for company in normalized_data[data_type]:
+        np.save(f"data/{company}/{data_type}.npy", normalized_data[data_type][company])
 print("Data collection complete.")

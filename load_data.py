@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import os
+import numpy as np
 import pandas as pd
 import random
 import torch
@@ -9,17 +10,18 @@ from os.path import join as pjoin
 
 # Global variable for the number of days to average
 DAYS_TO_AVERAGE = 5
-DATA_TYPES = ["stock_prices", "income_statement", "balance_sheet", "cash_flow", "corporate_actions"]
-STOCK_PRICES_ID = DATA_TYPES.index("stock_prices")
-WINDOW_SIZE = 365 * 3  # 3 years of data
+DATA_TYPES = ["stock_prices", "income_statement", "balance_sheet", "cash_flow"]  # removed "corporate_actions"
+DATE_INDEX = 0
+WINDOW_SIZE = 365  # a years of data
 WINDOW_INTERVAL = 5  # 5 days
+STOCK_PRICE_OPEN_INDEX = 1
 
 
 def stock_collate(batch):
     inputs, targets, dates = zip(*batch)
 
-    # Separate stock and balance features
-    padded = [pad_sequence(input[i] for input in inputs) for i in range(len(inputs[0]))]
+    inputs = [[torch.FloatTensor(input[data_type]) for input in inputs] for data_type in DATA_TYPES]
+    padded = [pad_sequence(input_of_type) for input_of_type in inputs]
     return padded, torch.FloatTensor(targets), torch.FloatTensor(dates)
 
 
@@ -31,39 +33,33 @@ def int_to_date(date):
 
 class StockDataset(Dataset):
     def __init__(self, data_dir: str):
-        self.data_dir = data_dir
-        self.data = self.load_data()
-        self.normalize_data()
-        self.input_sizes = [df.shape[1] for df in self.data]
-
-    def normalize_data(self):
-        # concatenate all company data
-        all_data = [pd.concat([company_data[data_type_index] for company_data in self.data]) for data_type_index in range(len(DATA_TYPES))] 
+        self.data_dir: str = data_dir
+        self.data: dict[str, dict[str, np.ndarray]] = self.load_data()
+        assert len(self.data) > 0, "No data found"
+        self.input_sizes: list[str] = [next(iter(self.data.values()))[data_type].shape[1] for data_type in DATA_TYPES]
 
     def load_data(self) -> list[pd.DataFrame]:
         # Load each data type into a list
-        data = [[pd.read_csv(pjoin(self.data_dir, company_name, f"{data_type}.csv")) for data_type in DATA_TYPES] for company_name in os.listdir(self.data_dir)]
-        data[STOCK_PRICES_ID] = data[STOCK_PRICES_ID][(data[STOCK_PRICES_ID]["Date"] % WINDOW_INTERVAL == 0)]
+        data = {company_name: {data_type: np.load(f"{self.data_dir}/{company_name}/{data_type}.npy") for data_type in DATA_TYPES} for company_name in os.listdir(self.data_dir) if os.path.isdir(pjoin(self.data_dir, company_name))}
+        for company, company_data in data.items():
+            company_data["stock_prices"] = company_data["stock_prices"][::WINDOW_INTERVAL]
         return data
 
     def __len__(self):
-        return len(self.data[STOCK_PRICES_ID])
+        return len(self.data) * 100
 
     def __getitem__(self, idx):
         # Pick a random company
-        company_index = random.randint(0, len(self.data) - 1)
-        company_data = self.data[company_index]
+        company_data: dict[str, np.ndarray] = random.choice(list(self.data.values()))
         # Sample a random date within the available range of stock prices
-        stock_prices = company_data[STOCK_PRICES_ID]
-        # sampled_date_index = random.randint(0, len(stock_prices) - 1)
-        sampled_date_index = random.randint(int((len(stock_prices) - 1) * 0.75), len(stock_prices) - 1)
-        sampled_date: float = stock_prices.iloc[sampled_date_index, 0]
+        stock_prices = company_data["stock_prices"]
+        sampled_date_index = random.randint(stock_prices.shape[0] // 2, stock_prices.shape[0] - 1)
+        sampled_date = stock_prices[sampled_date_index, DATE_INDEX]
 
         # Generate dictionary up to, but not including, the sampled date for each data type
-        data_up_to_date = [torch.FloatTensor(df[(df["Date"] < sampled_date) & (df["Date"] < sampled_date - WINDOW_SIZE)].values) for df in company_data]
-
+        date_indexes = {data_type: np.where(data_of_type[:, 0] < sampled_date)[0].max(initial=0) for data_type, data_of_type in company_data.items()}
+        data_up_to_date = {data_type: data_of_type[: date_indexes[data_type] + 1] for data_type, data_of_type in company_data.items()}
         # Calculate average stock value over the next WINDOW_SIZE days
-        next_days_prices = stock_prices[(stock_prices["Date"] > sampled_date) & (stock_prices["Date"] <= sampled_date + WINDOW_SIZE)]
-        average_stock_value = next_days_prices["Close"].mean()
+        stocks_data_after = stock_prices[sampled_date_index : sampled_date_index + WINDOW_SIZE, STOCK_PRICE_OPEN_INDEX]
 
-        return data_up_to_date, average_stock_value, sampled_date
+        return data_up_to_date, stocks_data_after.mean(), sampled_date
