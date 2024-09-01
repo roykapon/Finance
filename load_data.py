@@ -38,8 +38,7 @@ class StockDataset(Dataset):
         assert len(self.data) > 0, "No data found"
         self.input_sizes: list[str] = [next(iter(self.data.values()))[data_type].shape[1] for data_type in DATA_TYPES]
 
-    def load_data(self) -> list[pd.DataFrame]:
-        # Load each data type into a list
+    def load_data(self) -> dict[str, dict[str, np.ndarray]]:
         data = {company_name: {data_type: np.load(f"{self.data_dir}/{company_name}/{data_type}.npy") for data_type in DATA_TYPES} for company_name in os.listdir(self.data_dir) if os.path.isdir(pjoin(self.data_dir, company_name))}
         for company, company_data in data.items():
             company_data["stock_prices"] = company_data["stock_prices"][::WINDOW_INTERVAL]
