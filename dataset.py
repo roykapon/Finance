@@ -31,6 +31,19 @@ def int_to_date(date):
     return target_date.strftime("%Y-%m-%d")
 
 
+def retrieve_company_data(data: dict[str, dict[str, np.ndarray]], company_name: str, date: float) -> dict[str, np.ndarray]:
+    company_data = data[company_name]
+    stock_prices = company_data["stock_prices"]
+    
+    # Generate dictionary up to, but not including, the sampled date for each data type
+    date_indices = {data_type: np.where(data_of_type[:, 0] < date)[0].max(initial=0) for data_type, data_of_type in company_data.items()}
+    data_up_to_date = {data_type: data_of_type[: date_indices[data_type] + 1] for data_type, data_of_type in company_data.items()}
+    
+    # Calculate average stock value over the next WINDOW_SIZE days
+    stocks_data_after = stock_prices[date_indices["stock_prices"] : date_indices["stock_prices"] + WINDOW_SIZE, STOCK_PRICE_OPEN_INDEX]
+
+    return data_up_to_date, stocks_data_after.mean(), date
+
 class StockDataset(Dataset):
     def __init__(self, data_dir: str):
         self.data_dir: str = data_dir
@@ -49,16 +62,14 @@ class StockDataset(Dataset):
 
     def __getitem__(self, idx):
         # Pick a random company
-        company_data: dict[str, np.ndarray] = random.choice(list(self.data.values()))
+        company: str = random.choice(list(self.data.keys()))
+        company_data = self.data[company]
+        
         # Sample a random date within the available range of stock prices
         stock_prices = company_data["stock_prices"]
         sampled_date_index = random.randint(stock_prices.shape[0] // 2, stock_prices.shape[0] - 1)
         sampled_date = stock_prices[sampled_date_index, DATE_INDEX]
+        
+        return retrieve_company_data(self.data, sampled_date, sampled_date)
 
-        # Generate dictionary up to, but not including, the sampled date for each data type
-        date_indexes = {data_type: np.where(data_of_type[:, 0] < sampled_date)[0].max(initial=0) for data_type, data_of_type in company_data.items()}
-        data_up_to_date = {data_type: data_of_type[: date_indexes[data_type] + 1] for data_type, data_of_type in company_data.items()}
-        # Calculate average stock value over the next WINDOW_SIZE days
-        stocks_data_after = stock_prices[sampled_date_index : sampled_date_index + WINDOW_SIZE, STOCK_PRICE_OPEN_INDEX]
 
-        return data_up_to_date, stocks_data_after.mean(), sampled_date
