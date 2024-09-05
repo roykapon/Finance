@@ -10,6 +10,7 @@ import shutil
 DATA_TMP_DIR = "data_tmp"
 DATA_TYPES = ["stock_prices", "income_statement", "balance_sheet", "cash_flow", "corporate_actions"]
 MIN_STD = 1e-5
+DATE_INDEX = 0
 
 # Set up API key
 alpha_vantage_api_key = "7OLTH3MD4449GIQ3"
@@ -104,7 +105,7 @@ for symbol in most_traded_stocks:
 
             # Save each table to a separate CSV file
             os.makedirs(company_dir)
-            
+
             for data_type, data in data_dict.items():
                 data.to_csv(pjoin(company_dir, f"{data_type}.csv"), index=False)
 
@@ -132,8 +133,8 @@ stds = {data_type: np.maximum(data.std(axis=0), MIN_STD) for data_type, data in 
 # stds = {data_type: data.std(axis=0) for data_type, data in all_data_concatenated.items()}
 # do not normalize dates
 for data_type in DATA_TYPES:
-    means[data_type][0] = means["stock_prices"][0]
-    stds[data_type][0] = stds["stock_prices"][0]
+    means[data_type][DATE_INDEX] = means["stock_prices"][DATE_INDEX]
+    stds[data_type][DATE_INDEX] = stds["stock_prices"][DATE_INDEX]
 np.save(pjoin(DATA_TMP_DIR, "means.npy"), means)
 np.save(pjoin(DATA_TMP_DIR, "stds.npy"), stds)
 
@@ -171,5 +172,7 @@ for company in test_companies:
     shutil.copytree(pjoin(DATA_TMP_DIR, company), pjoin(test_dir, company))
 
 # copy mean and std
-shutil.copy(pjoin(DATA_TMP_DIR, "means.npy"), pjoin(DATA_DIR, "means.npy"))
-shutil.copy(pjoin(DATA_TMP_DIR, "stds.npy"), pjoin(DATA_DIR, "stds.npy"))
+shutil.copy(pjoin(DATA_TMP_DIR, "means.npy"), pjoin(train_dir, "means.npy"))
+shutil.copy(pjoin(DATA_TMP_DIR, "stds.npy"), pjoin(train_dir, "stds.npy"))
+shutil.copy(pjoin(DATA_TMP_DIR, "means.npy"), pjoin(test_dir, "means.npy"))
+shutil.copy(pjoin(DATA_TMP_DIR, "stds.npy"), pjoin(test_dir, "stds.npy"))

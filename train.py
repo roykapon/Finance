@@ -1,26 +1,20 @@
 import os
 import torch
 import torch.nn as nn
-from utils import CRITERION, parse_args
+from utils import CRITERION, BasicArgs, parse_args, set_seed
 from eval import EvalArgs, eval_model
-from load_data import StockDataset, stock_collate
+from dataset import StockDataset, stock_collate
 from torch.utils.data import DataLoader
-from model import TransformerModel
+from model import ModelArgs, TransformerModel, save_model
 import torch.optim as optim
 from os.path import join as pjoin
 
 
-class TrainArgs:
-    data_dir: str = "./data"
-    """Path to data directory"""
-    batch_size: int = 4
-    """Batch size for training"""
+class TrainArgs(ModelArgs, BasicArgs):
     num_epochs: int = 50000
     """Number of epochs"""
     learning_rate: float = 0.0001
     """Learning rate"""
-    device: str = "cuda:0"
-    """cuda device index"""
     save_interval: int = 10_000
     """Interval to save model"""
     save_dir: str = "./models/model/"
@@ -65,10 +59,9 @@ def train_model(args: TrainArgs, model: TransformerModel, train_dataloader: Data
 
     recent_losses = []
     for epoch in range(args.num_epochs):
-        for index, (inputs, targets, dates) in enumerate(train_dataloader):
+        for index, (inputs, targets, _, _) in enumerate(train_dataloader):
             inputs: list[torch.Tensor]
             targets: torch.Tensor
-            dates: torch.Tensor
 
             inputs = [input.to(args.device) for input in inputs]
             targets = targets.to(args.device)
@@ -77,7 +70,7 @@ def train_model(args: TrainArgs, model: TransformerModel, train_dataloader: Data
 
             # Forward pass
             outputs: torch.Tensor = model(inputs)
-            loss: torch.Tensor = CRITERION(outputs.squeeze(), targets)
+            loss: torch.Tensor = CRITERION(outputs, targets)
 
             recent_losses.append(loss.item())
             if len(recent_losses) > args.loss_window:
@@ -91,16 +84,19 @@ def train_model(args: TrainArgs, model: TransformerModel, train_dataloader: Data
             optimizer.step()
 
         if epoch % args.save_interval == 0 and epoch > 0:
+            print(f"Saving model at epoch {epoch}")
             save_path = pjoin(args.save_dir, f"checkpoint_{epoch}.pt")
-            torch.save(model.state_dict(), save_path)
+            
+            save_model(model, args, save_path)
             eval_model(create_eval_args(args, save_path), model, test_dataloader)
             print("Model saved")
 
     print("Training complete")
 
 
-if __name__ == "__main__":
+def main():
     args: TrainArgs = parse_args(TrainArgs)
+    set_seed(args.seed)
 
     # Create dataset and dataloader
     train_dataset = StockDataset(pjoin(args.data_dir, "train"))
@@ -109,7 +105,12 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, collate_fn=stock_collate)
 
     # Create model
-    model = TransformerModel(train_dataset.input_sizes)
+    args.input_sizes = train_dataset.input_sizes
+    model = TransformerModel(args)
 
     # Train model
     train_model(args, model, train_dataloader, test_dataloader)
+
+
+if __name__ == "__main__":
+    main()
