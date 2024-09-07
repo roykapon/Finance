@@ -1,6 +1,6 @@
 import os
 import torch.nn as nn
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 import inspect
 import random
 import torch
@@ -57,7 +57,7 @@ class BasicArgs:
     """Seed to use for randomness"""
 
 
-def args_to_dict(args):
+def args_to_dict(args: Namespace):
     return {arg: value for arg, value in args.__dict__.items() if not arg.startswith("__")}
 
 
@@ -66,13 +66,3 @@ def dict_to_args(args_dict: dict, ArgsClass: type):
     for arg, value in args_dict.items():
         setattr(args, arg, value)
     return args
-
-
-def visualize_stocks(batch_predictions: np.ndarray, batch_gts: np.ndarray, companies: str, batch_dates: np.ndarray, save_dir: str):
-    os.makedirs(save_dir, exist_ok=True)
-    for i, (prediction, gt, company, dates) in enumerate(zip(batch_predictions, batch_gts, companies, batch_dates)):
-        plt.plot(dates, prediction, label="Prediction", color="red")
-        plt.plot(dates, gt, label="Ground Truth", color="blue")
-        plt.title(f"Stock Prices of {company} in dates: {dates[0]} to {dates[-1]}")
-        plt.savefig(pjoin(save_dir, f"{i}.png"))
-        plt.clf()

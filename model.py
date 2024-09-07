@@ -12,9 +12,9 @@ class ModelArgs(BasicArgs):
     """Number of attention heads"""
     num_layers: int = 2
     """Number of transformer layers"""
-    ff_hidden_dim: int = 256
+    ff_hidden_dim: int = 32
     """Hidden dimension of the feedforward network"""
-    latent_dim: int = 64
+    latent_dim: int = 16
     """Dimension of the latent space"""
 
 

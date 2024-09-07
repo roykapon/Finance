@@ -131,7 +131,7 @@ all_data_concatenated = {data_type: np.concatenate(list(data.values())) for data
 means = {data_type: data.mean(axis=0) for data_type, data in all_data_concatenated.items()}
 stds = {data_type: np.maximum(data.std(axis=0), MIN_STD) for data_type, data in all_data_concatenated.items()}
 # stds = {data_type: data.std(axis=0) for data_type, data in all_data_concatenated.items()}
-# do not normalize dates
+# normalize dates with the same mean and std as stock prices
 for data_type in DATA_TYPES:
     means[data_type][DATE_INDEX] = means["stock_prices"][DATE_INDEX]
     stds[data_type][DATE_INDEX] = stds["stock_prices"][DATE_INDEX]
