@@ -12,17 +12,19 @@ from os.path import join as pjoin
 DAYS_TO_AVERAGE = 5
 DATA_TYPES = ["stock_prices", "income_statement", "balance_sheet", "cash_flow"]  # removed "corporate_actions"
 DATE_INDEX = 0
-WINDOW_SIZE = 365  # a years of data
+ABS_WINDOW_SIZE = 365  # a years of data
 WINDOW_INTERVAL = 5  # 5 days
+WINDOW_SIZE = ABS_WINDOW_SIZE // WINDOW_INTERVAL
+
 STOCK_PRICE_OPEN_INDEX = 1
 
 
 def stock_collate(batch: tuple[list[list[np.ndarray]], list[np.ndarray], list[str], list[float]]) -> tuple[list[np.ndarray], np.ndarray, list[str], np.ndarray]:
     inputs, targets, companies, dates = zip(*batch)
 
-    inputs = [[torch.FloatTensor(input[data_type]) for input in inputs] for data_type in DATA_TYPES]
-    padded = [pad_sequence(input_of_type) for input_of_type in inputs]
-    return padded, torch.FloatTensor(targets), companies, np.array(dates)
+    inputs = [pad_sequence([torch.FloatTensor(input[data_type]) for input in inputs]) for data_type in DATA_TYPES]
+    targets = pad_sequence([torch.FloatTensor(target) for target in targets])
+    return inputs, targets, companies, np.array(dates)
 
 
 def int_to_date(date):
@@ -32,16 +34,21 @@ def int_to_date(date):
 
 
 class StockDataset(Dataset):
-    def __init__(self, data_dir: str):
+    def __init__(self, data_dir: str, test: bool = False):
         self.data_dir: str = data_dir
         self.data: dict[str, dict[str, np.ndarray]] = self.load_data()
+        self.test = test
         assert len(self.data) > 0, "No data found"
         self.input_sizes: list[str] = [next(iter(self.data.values()))[data_type].shape[1] for data_type in DATA_TYPES]
         self.mean: dict[str, np.ndarray] = np.load(pjoin(data_dir, "means.npy"), allow_pickle=True)[()]
         self.std: dict[str, np.ndarray] = np.load(pjoin(data_dir, "stds.npy"), allow_pickle=True)[()]
 
+    def filter_data(self, data: dict[str, dict[str, np.ndarray]]) -> dict[str, dict[str, np.ndarray]]:
+        return {company: company_data for company, company_data in data.items() if company_data["stock_prices"].shape[0] >= 3 * ABS_WINDOW_SIZE}
+
     def load_data(self) -> dict[str, dict[str, np.ndarray]]:
-        data = {company_name: {data_type: np.load(f"{self.data_dir}/{company_name}/{data_type}.npy") for data_type in DATA_TYPES} for company_name in os.listdir(self.data_dir) if os.path.isdir(pjoin(self.data_dir, company_name))}
+        data: dict[str, dict[str, np.ndarray]] = {company_name: {data_type: np.load(pjoin(self.data_dir, company_name, f"{data_type}.npy")) for data_type in DATA_TYPES} for company_name in os.listdir(self.data_dir) if os.path.isdir(pjoin(self.data_dir, company_name))}
+        data = self.filter_data(data)
         for company, company_data in data.items():
             company_data["stock_prices"] = company_data["stock_prices"][::WINDOW_INTERVAL]
         return data
@@ -49,18 +56,17 @@ class StockDataset(Dataset):
     def __len__(self):
         return len(self.data) * 100
 
-    def retrieve_company_data(self, company_name: str, date: float) -> dict[str, np.ndarray]:
+    def retrieve_company_data(self, company_name: str, date_from: float, date_to: float) -> dict[str, np.ndarray]:
         company_data = self.data[company_name]
-        stock_prices = company_data["stock_prices"]
+        return {data_type: data_of_type[(data_of_type[:, 0] >= date_from) & (data_of_type[:, 0] <= date_to)] for data_type, data_of_type in company_data.items()}
 
-        # Generate dictionary up to, but not including, the sampled date for each data type
-        date_indices = {data_type: np.where(data_of_type[:, 0] < date)[0].max(initial=0) for data_type, data_of_type in company_data.items()}
-        data_up_to_date = {data_type: data_of_type[: date_indices[data_type] + 1] for data_type, data_of_type in company_data.items()}
-
-        # Calculate average stock value over the next WINDOW_SIZE days
-        stocks_data_after = stock_prices[date_indices["stock_prices"] : date_indices["stock_prices"] + WINDOW_SIZE, STOCK_PRICE_OPEN_INDEX]
-
-        return data_up_to_date, stocks_data_after.mean()
+    def sample_date(self, company_datas: np.ndarray) -> float:
+        dates_len = company_datas.shape[0] - 1
+        if self.test:
+            date_index = random.randint(dates_len - 2 * WINDOW_SIZE, dates_len - WINDOW_SIZE)
+        else:
+            date_index = random.randint(2 * WINDOW_SIZE, dates_len - 2 * WINDOW_SIZE)
+        return company_datas[date_index - 2 * WINDOW_SIZE], company_datas[date_index], company_datas[date_index + WINDOW_SIZE]
 
     def __getitem__(self, idx) -> tuple[list[np.ndarray], np.ndarray, str, float]:
         # Pick a random company
@@ -69,10 +75,15 @@ class StockDataset(Dataset):
 
         # Sample a random date within the available range of stock prices
         stock_prices = company_data["stock_prices"]
-        date_index = random.randint(stock_prices.shape[0] // 2, stock_prices.shape[0] - 1)
-        date = stock_prices[date_index, DATE_INDEX]
+        input_start_date, date, prediction_end_date = self.sample_date(stock_prices[:, DATE_INDEX])
 
-        return (*self.retrieve_company_data(company, date), company, date)
+        past_data = self.retrieve_company_data(company, input_start_date, date)
+        future_data = self.retrieve_company_data(company, date, prediction_end_date)
+        future_stock_data = future_data["stock_prices"][:, (DATE_INDEX, STOCK_PRICE_OPEN_INDEX)]
+        return past_data, future_stock_data, company, date
+
+    def normalize_dates(self, dates: np.ndarray) -> np.ndarray:
+        return (dates - self.mean["stock_prices"][DATE_INDEX]) / self.std["stock_prices"][DATE_INDEX]
 
     def denormalize_dates(self, dates: np.ndarray) -> np.ndarray:
         return dates * self.std["stock_prices"][DATE_INDEX] + self.mean["stock_prices"][DATE_INDEX]

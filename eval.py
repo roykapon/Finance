@@ -25,12 +25,15 @@ def eval_model(args: EvalArgs, model: TransformerModel, test_dataloader: DataLoa
         inputs = [input.to(args.device) for input in inputs]
         targets = targets.to(args.device)
 
-        outputs: torch.Tensor = model(inputs)
+        target_dates = targets[:, :, 0]
+        targets = targets[:, :, 1]
+
+        outputs: torch.Tensor = model(inputs, target_dates)
         loss: torch.Tensor = CRITERION(outputs, targets)
 
         losses.append(loss.item())
 
-    print(f"Average loss: {sum(losses) / len(losses)}")
+    print(f"Model: {args.model_path}    Loss: {sum(losses) / len(losses)}")
     # save evaluation results to a file
     results_path = pjoin(os.path.dirname(args.model_path), f"eval_results_{os.path.splitext(os.path.basename(args.model_path))[0]}.txt")
     with open(results_path, "w") as f:

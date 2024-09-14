@@ -1,13 +1,9 @@
-import os
 import torch.nn as nn
 from argparse import ArgumentParser, Namespace
 import inspect
 import random
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
-from os.path import join as pjoin
-from dataset import STOCK_PRICE_OPEN_INDEX
 
 CRITERION = nn.MSELoss()
 
@@ -47,7 +43,7 @@ def parse_args(ArgsClass: type):
 
 
 class BasicArgs:
-    data_dir: str = "./data"
+    data_dir: str = "./data_tmp"
     """Path to data directory"""
     batch_size: int = 4
     """Batch size for training"""
