@@ -1,9 +1,10 @@
 import os
+from typing import Callable
 import torch
 import torch.nn as nn
-from utils import CRITERION, BasicArgs, parse_args, set_seed
+from utils import CRITERION, BasicArgs, parse_args, set_seed, get_loss_fn
 from eval import EvalArgs, eval_model
-from dataset import DATE_INDEX, StockDataset, stock_collate
+from dataset import DATE_INDEX, STOCK_PRICE_OPEN_INDEX, StockDataset, stock_collate
 from torch.utils.data import DataLoader
 from model import ModelArgs, TransformerModel, save_model
 import torch.optim as optim
@@ -15,7 +16,7 @@ class TrainArgs(ModelArgs, BasicArgs):
     """Number of epochs"""
     learning_rate: float = 0.0001
     """Learning rate"""
-    save_interval: int = 1_000
+    save_interval: int = 100
     """Interval to save model"""
     eval_interval: int = 100
     """Interval to evaluate model"""
@@ -25,9 +26,6 @@ class TrainArgs(ModelArgs, BasicArgs):
     """Interval to log loss"""
     loss_window: int = 100
     """Number of losses to average"""
-
-
-criterion = nn.MSELoss()
 
 
 def model_size(model: nn.Module):
@@ -50,7 +48,7 @@ def create_eval_args(args: TrainArgs, model_path: str) -> EvalArgs:
     return eval_args
 
 
-def train_model(args: TrainArgs, model: TransformerModel, train_dataloader: DataLoader, test_dataloader: DataLoader):
+def train_model(args: TrainArgs, model: TransformerModel, loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor], train_dataloader: DataLoader, test_dataloader: DataLoader):
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
     model.train()
     model.to(args.device)
@@ -75,7 +73,7 @@ def train_model(args: TrainArgs, model: TransformerModel, train_dataloader: Data
             target_dates = targets[:, :, 0]
             targets = targets[:, :, 1]
             outputs: torch.Tensor = model(inputs, target_dates)
-            loss: torch.Tensor = CRITERION(outputs, targets)
+            loss: torch.Tensor = loss_fn(outputs, targets)
 
             recent_losses.append(loss.item())
             if len(recent_losses) > args.loss_window:
@@ -87,10 +85,9 @@ def train_model(args: TrainArgs, model: TransformerModel, train_dataloader: Data
             # Backward pass and optimization
             loss.backward()
             optimizer.step()
-        
-        if epoch % args.eval_interval == 0 and epoch > 0:
-            eval_model(create_eval_args(args, pjoin(args.save_dir, f"checkpoint_eval_{epoch}.txt")), model, test_dataloader)
 
+        if epoch % args.eval_interval == 0 and epoch > 0:
+            eval_model(create_eval_args(args, pjoin(args.save_dir, f"checkpoint_eval_{epoch}.txt")), model, loss_fn, test_dataloader)
 
         if epoch % args.save_interval == 0 and epoch > 0:
             print(f"Saving model at epoch {epoch}")
@@ -113,8 +110,10 @@ def main():
     args.input_sizes = train_dataset.input_sizes
     model = TransformerModel(args)
 
+    loss_fn = get_loss_fn(train_dataset.mean["stock_prices"][STOCK_PRICE_OPEN_INDEX], train_dataset.std["stock_prices"][STOCK_PRICE_OPEN_INDEX])
+
     # Train model
-    train_model(args, model, train_dataloader, test_dataloader)
+    train_model(args, model, loss_fn, train_dataloader, test_dataloader)
 
 
 if __name__ == "__main__":

@@ -1,10 +1,11 @@
 import os
+from typing import Callable
 import torch
-from dataset import StockDataset, stock_collate
+from dataset import STOCK_PRICE_OPEN_INDEX, StockDataset, stock_collate
 from os.path import join as pjoin
 from model import TransformerModel, load_model
 from torch.utils.data import DataLoader
-from utils import CRITERION, parse_args, BasicArgs, set_seed
+from utils import get_loss_fn, parse_args, BasicArgs, set_seed
 
 
 class EvalArgs(BasicArgs):
@@ -15,7 +16,7 @@ class EvalArgs(BasicArgs):
 
 
 @torch.no_grad()
-def eval_model(args: EvalArgs, model: TransformerModel, test_dataloader: DataLoader):
+def eval_model(args: EvalArgs, model: TransformerModel, loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor], test_dataloader: DataLoader):
     model.eval()
     losses = []
     for inputs, targets, _, _ in test_dataloader:
@@ -29,7 +30,7 @@ def eval_model(args: EvalArgs, model: TransformerModel, test_dataloader: DataLoa
         targets = targets[:, :, 1]
 
         outputs: torch.Tensor = model(inputs, target_dates)
-        loss: torch.Tensor = CRITERION(outputs, targets)
+        loss: torch.Tensor = loss_fn(outputs, targets)
 
         losses.append(loss.item())
 
@@ -43,11 +44,12 @@ def eval_model(args: EvalArgs, model: TransformerModel, test_dataloader: DataLoa
 def main():
     args: EvalArgs = parse_args(EvalArgs)
     set_seed(args.seed)
-    data = StockDataset(pjoin(args.data_dir, "test"))
+    data = StockDataset(pjoin(args.data_dir, test=True))
     test_dataloader = DataLoader(data, batch_size=args.batch_size, shuffle=True, collate_fn=stock_collate)
     model, model_args = load_model(args.model_path)
     model.to(args.device)
-    eval_model(args, model, test_dataloader)
+    loss_fn = get_loss_fn(data.mean["stock_prices"][STOCK_PRICE_OPEN_INDEX], data.std["stock_prices"][STOCK_PRICE_OPEN_INDEX])
+    eval_model(args, model, loss_fn, test_dataloader)
 
 
 if __name__ == "__main__":

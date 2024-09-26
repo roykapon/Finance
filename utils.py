@@ -4,8 +4,7 @@ import inspect
 import random
 import torch
 import numpy as np
-
-CRITERION = nn.MSELoss()
+from typing import Callable
 
 
 def set_seed(seed: int):
@@ -45,7 +44,7 @@ def parse_args(ArgsClass: type):
 class BasicArgs:
     data_dir: str = "./data_tmp"
     """Path to data directory"""
-    batch_size: int = 4
+    batch_size: int = 16
     """Batch size for training"""
     device: str = "cuda:0"
     """cuda device index"""
@@ -62,3 +61,16 @@ def dict_to_args(args_dict: dict, ArgsClass: type):
     for arg, value in args_dict.items():
         setattr(args, arg, value)
     return args
+
+
+mse = nn.MSELoss()
+
+
+def get_loss_fn(mean: torch.Tensor, std: torch.Tensor) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
+    def loss_fn(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        x = x * std + mean
+        y = y * std + mean
+        print(f"X: {x}")
+        print(f"Y: {y}")
+        return mse(x / y.mean(), y / y.mean())
+    return loss_fn

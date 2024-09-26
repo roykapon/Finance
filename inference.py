@@ -7,7 +7,7 @@ from os.path import join as pjoin
 from eval import EvalArgs
 from model import TransformerModel, load_model
 from torch.utils.data import DataLoader
-from utils import CRITERION, parse_args, set_seed
+from utils import parse_args, set_seed, get_loss_fn
 
 
 class InferenceArgs(EvalArgs):
@@ -41,11 +41,13 @@ def main():
     set_seed(args.seed)
     args.save_dir = args.save_dir if args.save_dir else pjoin(os.path.dirname(args.model_path))
 
-    test_dataset = StockDataset(args.data_dir, test=False)
+    test_dataset = StockDataset(args.data_dir, test=True)
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=stock_collate)
     model, model_args = load_model(args.model_path)
     model.to(args.device)
     model.eval()
+    
+    loss_fn = get_loss_fn(test_dataset.mean["stock_prices"][STOCK_PRICE_OPEN_INDEX], test_dataset.std["stock_prices"][STOCK_PRICE_OPEN_INDEX])
 
     inputs, targets, companies, dates = next(iter(test_dataloader))
     inputs: list[torch.Tensor]
@@ -60,7 +62,7 @@ def main():
     targets = targets[:, :, 1]
 
     predictions: torch.Tensor = model(inputs, target_dates)
-    loss: torch.Tensor = CRITERION(predictions, targets)
+    loss: torch.Tensor = loss_fn(predictions, targets)
 
     print(f"Loss: {loss.item()}")
     # save inference results to a file
