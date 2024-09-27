@@ -27,6 +27,7 @@ class TransformerModel(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
 
+        self.positional_encoding = PositionalEncoding(args.latent_dim)
         # Create an MLP for each data type and one for the class embeddings
         self.mlps = nn.ModuleList([MLP(input_size, args.ff_hidden_dim, args.latent_dim) for input_size in args.input_sizes] + [MLP(1, args.ff_hidden_dim, args.latent_dim)])
 
@@ -41,6 +42,9 @@ class TransformerModel(nn.Module):
         # add class tokens
         # Encode each input using its respective MLP
         x: list[torch.Tensor] = torch.concatenate([mlp(x) for mlp, x in zip(self.mlps, inputs + [out_dates.unsqueeze(-1)])], axis=0)
+
+        # Add positional encoding
+        x = self.positional_encoding(x)
 
         # Apply Transformer encoder
         x = self.transformer_encoder(x)
@@ -58,3 +62,29 @@ def load_model(path: str) -> tuple[TransformerModel, ModelArgs]:
     model = TransformerModel(checkpoint["model_args"])
     model.load_state_dict(checkpoint["model"])
     return model, checkpoint["model_args"]
+
+
+class PositionalEncoding(nn.Module):
+
+    pe: torch.Tensor
+
+    def __init__(self, d_model: int, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=0.1)
+
+        # Create a matrix of shape (max_len, d_model) to hold the positional encodings
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-torch.log(torch.tensor(10000.0)) / d_model))
+
+        pe = torch.zeros(max_len, d_model)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(1)  # Add batch dimension
+
+        # Register the positional encoding as a buffer (not a parameter)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Add positional encoding to the input
+        x = x + self.pe[: x.shape[0], ...]
+        return self.dropout(x)

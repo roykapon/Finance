@@ -2,7 +2,7 @@ import os
 from typing import Callable
 import torch
 import torch.nn as nn
-from utils import CRITERION, BasicArgs, parse_args, set_seed, get_loss_fn
+from utils import BasicArgs, parse_args, set_seed, get_loss_fn
 from eval import EvalArgs, eval_model
 from dataset import DATE_INDEX, STOCK_PRICE_OPEN_INDEX, StockDataset, stock_collate
 from torch.utils.data import DataLoader

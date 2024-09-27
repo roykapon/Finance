@@ -70,7 +70,5 @@ def get_loss_fn(mean: torch.Tensor, std: torch.Tensor) -> Callable[[torch.Tensor
     def loss_fn(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         x = x * std + mean
         y = y * std + mean
-        print(f"X: {x}")
-        print(f"Y: {y}")
         return mse(x / y.mean(), y / y.mean())
     return loss_fn
