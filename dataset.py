@@ -22,7 +22,7 @@ STOCK_PRICE_OPEN_INDEX = 1
 def stock_collate(batch: tuple[list[list[np.ndarray]], list[np.ndarray], list[str], list[float]]) -> tuple[list[np.ndarray], np.ndarray, list[str], np.ndarray]:
     inputs, targets, companies, dates = zip(*batch)
 
-    inputs = [pad_sequence([torch.FloatTensor(input[data_type]) for input in inputs]) for data_type in DATA_TYPES]
+    inputs = [pad_sequence([torch.from_numpy(input[data_type].astype(np.float32)) for input in inputs]) for data_type in DATA_TYPES]
     targets = pad_sequence([torch.FloatTensor(target) for target in targets])
     return inputs, targets, companies, np.array(dates)
 
