@@ -13,7 +13,7 @@ DAYS_TO_AVERAGE = 5
 DATA_TYPES = ["stock_prices", "income_statement", "balance_sheet", "cash_flow"]  # removed "corporate_actions"
 DATE_INDEX = 0
 ABS_WINDOW_SIZE = 365  # a years of data
-WINDOW_INTERVAL = 5  # 5 days
+WINDOW_INTERVAL = 12  # 5 days
 WINDOW_SIZE = ABS_WINDOW_SIZE // WINDOW_INTERVAL
 
 STOCK_PRICE_OPEN_INDEX = 1
@@ -78,7 +78,7 @@ class StockDataset(Dataset):
         input_start_date, date, prediction_end_date = self.sample_date(stock_prices[:, DATE_INDEX])
 
         past_data = self.retrieve_company_data(company, input_start_date, date)
-        future_data = self.retrieve_company_data(company, date, prediction_end_date)
+        future_data = self.retrieve_company_data(company, input_start_date, prediction_end_date)
         future_stock_data = future_data["stock_prices"][:, (DATE_INDEX, STOCK_PRICE_OPEN_INDEX)]
         return past_data, future_stock_data, company, date
 

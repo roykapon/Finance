@@ -8,13 +8,13 @@ from utils import BasicArgs
 class ModelArgs(BasicArgs):
     input_sizes: list[int] = []
     """List of input sizes for each data type"""
-    num_heads: int = 8
+    num_heads: int = 4
     """Number of attention heads"""
     num_layers: int = 4
     """Number of transformer layers"""
     ff_hidden_dim: int = 128
     """Hidden dimension of the feedforward network"""
-    latent_dim: int = 64
+    latent_dim: int = 32
     """Dimension of the latent space"""
 
 
